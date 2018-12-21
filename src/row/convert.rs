@@ -1078,7 +1078,7 @@ where
     T11: FromValue<Intermediate = Ir11>,
     Ir12: ConvIr<T12>,
     T12: FromValue<Intermediate = Ir12>,
-    Ir12: ConvIr<T13>,
+    Ir13: ConvIr<T13>,
     T12: FromValue<Intermediate = Ir13>,
 {
     #[inline]
@@ -1095,8 +1095,8 @@ where
     }
     fn from_row_opt(
         mut row: Row,
-    ) -> Result<(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12), FromRowError> {
-        if row.len() != 12 {
+    ) -> Result<(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13), FromRowError> {
+        if row.len() != 13 {
             return Err(FromRowError(row));
         }
         let ir1 = take_or_place!(row, 0, T1);
@@ -1186,7 +1186,7 @@ where
             [9, ir10],
             [10, ir11]
         );
-        let ir12 = take_or_place!(
+        let ir13 = take_or_place!(
             row,
             12,
             T13,
