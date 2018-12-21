@@ -1079,7 +1079,7 @@ where
     Ir12: ConvIr<T12>,
     T12: FromValue<Intermediate = Ir12>,
     Ir13: ConvIr<T13>,
-    T12: FromValue<Intermediate = Ir13>,
+    T13: FromValue<Intermediate = Ir13>,
 {
     #[inline]
     fn from_row(row: Row) -> (T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13) {
