@@ -1406,7 +1406,7 @@ where
         );
         let ir14 = take_or_place!(
             row,
-            12,
+            13,
             T14,
             [0, ir1],
             [1, ir2],
