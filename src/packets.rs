@@ -6,13 +6,13 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
+use crate::constants::{
+    CapabilityFlags, ColumnFlags, ColumnType, SessionStateType, StatusFlags, MAX_PAYLOAD_LEN,
+    UTF8MB4_GENERAL_CI, UTF8_GENERAL_CI,
+};
+use crate::io::ReadMysqlExt;
 use atoi::atoi;
 use byteorder::{LittleEndian as LE, ReadBytesExt, WriteBytesExt};
-use constants::{
-    CapabilityFlags, ColumnFlags, ColumnType, SessionStateType, StatusFlags, UTF8MB4_GENERAL_CI,
-    UTF8_GENERAL_CI, MAX_PAYLOAD_LEN,
-};
-use io::ReadMysqlExt;
 use regex::bytes::Regex;
 use std::borrow::Cow;
 use std::cmp::{max, min};
@@ -208,7 +208,7 @@ impl Column {
     }
 
     /// Returns value of the schema field of a column packet as a string (lossy converted).
-    pub fn schema_str(&self) -> Cow<str> {
+    pub fn schema_str(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(self.schema_ref())
     }
 
@@ -218,7 +218,7 @@ impl Column {
     }
 
     /// Returns value of the table field of a column packet as a string (lossy converted).
-    pub fn table_str(&self) -> Cow<str> {
+    pub fn table_str(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(self.table_ref())
     }
 
@@ -230,7 +230,7 @@ impl Column {
     }
 
     /// Returns value of the org_table field of a column packet as a string (lossy converted).
-    pub fn org_table_str(&self) -> Cow<str> {
+    pub fn org_table_str(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(self.org_table_ref())
     }
 
@@ -240,7 +240,7 @@ impl Column {
     }
 
     /// Returns value of the name field of a column packet as a string (lossy converted).
-    pub fn name_str(&self) -> Cow<str> {
+    pub fn name_str(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(self.name_ref())
     }
 
@@ -252,7 +252,7 @@ impl Column {
     }
 
     /// Returns value of the org_name field of a column packet as a string (lossy converted).
-    pub fn org_name_str(&self) -> Cow<str> {
+    pub fn org_name_str(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(self.org_name_ref())
     }
 }
@@ -292,7 +292,7 @@ pub struct SessionStateInfo<'a> {
 }
 
 impl<'a> SessionStateInfo<'a> {
-    pub fn parse(mut payload: &[u8]) -> io::Result<SessionStateInfo> {
+    pub fn parse(mut payload: &[u8]) -> io::Result<SessionStateInfo<'_>> {
         let data_type = payload.read_u8()?;
         Ok(SessionStateInfo {
             data_type: data_type.into(),
@@ -312,7 +312,7 @@ impl<'a> SessionStateInfo<'a> {
         self.data_type
     }
 
-    pub fn decode(&self) -> io::Result<SessionStateChange> {
+    pub fn decode(&self) -> io::Result<SessionStateChange<'_>> {
         let mut reader = self.data.as_ref();
         match self.data_type {
             SessionStateType::SESSION_TRACK_SYSTEM_VARIABLES => {
@@ -353,7 +353,7 @@ pub struct OkPacket<'a> {
 }
 
 /// Parses Ok packet from `payload` assuming passed client-server `capabilities`.
-pub fn parse_ok_packet(payload: &[u8], capabilities: CapabilityFlags) -> io::Result<OkPacket> {
+pub fn parse_ok_packet(payload: &[u8], capabilities: CapabilityFlags) -> io::Result<OkPacket<'_>> {
     OkPacket::parse(payload, capabilities)
 }
 
@@ -476,7 +476,7 @@ impl<'a> OkPacket<'a> {
             .map(|x| String::from_utf8_lossy(x.as_ref()))
     }
 
-    pub fn session_state_info(&self) -> Option<&SessionStateInfo> {
+    pub fn session_state_info(&self) -> Option<&SessionStateInfo<'_>> {
         self.session_state_info.as_ref()
     }
 }
@@ -525,7 +525,7 @@ impl<'a> ProgressReport<'a> {
     }
 
     /// Status or state name as a string (lossy converted).
-    pub fn stage_info_str(&self) -> Cow<str> {
+    pub fn stage_info_str(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(self.stage_info.as_ref())
     }
 
@@ -546,7 +546,7 @@ impl<'a> ProgressReport<'a> {
 }
 
 impl<'a> fmt::Display for ProgressReport<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "Stage: {} of {} '{}'  {:.2}% of stage done",
@@ -569,13 +569,16 @@ pub enum ErrPacket<'a> {
 }
 
 /// Parses error packet from `payload` assuming passed client-server `capabilities`.
-pub fn parse_err_packet(payload: &[u8], capabilities: CapabilityFlags) -> io::Result<ErrPacket> {
+pub fn parse_err_packet(
+    payload: &[u8],
+    capabilities: CapabilityFlags,
+) -> io::Result<ErrPacket<'_>> {
     ErrPacket::parse(payload, capabilities)
 }
 
 impl<'a> ErrPacket<'a> {
     /// Parses error packet from `payload` assuming passed client-server `capabilities`.
-    fn parse(mut payload: &[u8], capabilities: CapabilityFlags) -> io::Result<ErrPacket> {
+    fn parse(mut payload: &[u8], capabilities: CapabilityFlags) -> io::Result<ErrPacket<'_>> {
         if payload.read_u8()? != 0xFF {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -631,7 +634,7 @@ impl<'a> ErrPacket<'a> {
     }
 
     /// Will panic if ErrPacket does not contains progress report
-    pub fn progress_report(&self) -> &ProgressReport {
+    pub fn progress_report(&self) -> &ProgressReport<'_> {
         match *self {
             ErrPacket::Progress(ref progress_report) => progress_report,
             _ => panic!("This ErrPacket does not contains progress report"),
@@ -655,7 +658,7 @@ impl<'a> ErrPacket<'a> {
     }
 
     /// Will panic if ErrPacket contains progress report
-    pub fn sql_state_str(&self) -> Cow<str> {
+    pub fn sql_state_str(&self) -> Cow<'_, str> {
         match *self {
             ErrPacket::Error(_, ref state, _) => String::from_utf8_lossy(&state[..]),
             _ => panic!("This ErrPacket contains progress report"),
@@ -671,7 +674,7 @@ impl<'a> ErrPacket<'a> {
     }
 
     /// Will panic if ErrPacket contains progress report
-    pub fn message_str(&self) -> Cow<str> {
+    pub fn message_str(&self) -> Cow<'_, str> {
         match *self {
             ErrPacket::Error(_, _, ref message) => String::from_utf8_lossy(message.as_ref()),
             _ => panic!("This ErrPacket contains progress report"),
@@ -691,7 +694,7 @@ impl<'a> ErrPacket<'a> {
 }
 
 impl<'a> fmt::Display for ErrPacket<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             ErrPacket::Error(..) => write!(
                 f,
@@ -711,13 +714,13 @@ pub struct LocalInfilePacket<'a> {
 }
 
 /// Will parse payload as a local infile packet.
-pub fn parse_local_infile_packet(payload: &[u8]) -> io::Result<LocalInfilePacket> {
+pub fn parse_local_infile_packet(payload: &[u8]) -> io::Result<LocalInfilePacket<'_>> {
     LocalInfilePacket::parse(payload)
 }
 
 impl<'a> LocalInfilePacket<'a> {
     /// Will parse payload as a local infile packet.
-    fn parse(mut payload: &[u8]) -> io::Result<LocalInfilePacket> {
+    fn parse(mut payload: &[u8]) -> io::Result<LocalInfilePacket<'_>> {
         if payload.read_u8()? != 0xfb {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -736,7 +739,7 @@ impl<'a> LocalInfilePacket<'a> {
     }
 
     /// Value of the file_name field of a local infile packet as a string (lossy converted).
-    pub fn file_name_str(&self) -> Cow<str> {
+    pub fn file_name_str(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(self.file_name.as_ref())
     }
 
@@ -793,8 +796,12 @@ impl<'a> AuthPlugin<'a> {
 
         match pass {
             Some(pass) => match self {
-                AuthPlugin::CachingSha2Password => scramble_sha256(nonce, pass.as_bytes()).map(|x| Vec::from(&x[..])),
-                AuthPlugin::MysqlNativePassword => scramble_native(nonce, pass.as_bytes()).map(|x| Vec::from(&x[..])),
+                AuthPlugin::CachingSha2Password => {
+                    scramble_sha256(nonce, pass.as_bytes()).map(|x| Vec::from(&x[..]))
+                }
+                AuthPlugin::MysqlNativePassword => {
+                    scramble_native(nonce, pass.as_bytes()).map(|x| Vec::from(&x[..]))
+                }
                 AuthPlugin::Other(_) => None,
             },
             None => None,
@@ -811,14 +818,13 @@ pub struct AuthMoreData<'a> {
 impl<'a> AuthMoreData<'a> {
     fn parse(mut payload: &'a [u8]) -> io::Result<Self> {
         match payload.read_u8()? {
-            0x01 => {
-                Ok(AuthMoreData {
-                    data: payload.into(),
-                })
-            },
-            _ => {
-                Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid AuthMoreData header"))
-            }
+            0x01 => Ok(AuthMoreData {
+                data: payload.into(),
+            }),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid AuthMoreData header",
+            )),
         }
     }
 
@@ -834,7 +840,7 @@ impl<'a> AuthMoreData<'a> {
 }
 
 /// Parses payload as an auth more data packet.
-pub fn parse_auth_more_data(payload: &[u8]) -> io::Result<AuthMoreData> {
+pub fn parse_auth_more_data(payload: &[u8]) -> io::Result<AuthMoreData<'_>> {
     AuthMoreData::parse(payload)
 }
 
@@ -859,11 +865,8 @@ impl<'a> AuthSwitchRequest<'a> {
                     }
                     null_offset += 1;
                 }
-                let (auth_plugin, mut payload) = split_at_or_err!(
-                    payload,
-                    null_offset,
-                    "Invalid AuthSwitchRequest packet"
-                )?;
+                let (auth_plugin, mut payload) =
+                    split_at_or_err!(payload, null_offset, "Invalid AuthSwitchRequest packet")?;
                 payload.read_u8()?;
                 let plugin_data = if payload[payload.len() - 1] == 0 {
                     &payload[..payload.len() - 1]
@@ -874,14 +877,15 @@ impl<'a> AuthSwitchRequest<'a> {
                     auth_plugin: AuthPlugin::from_bytes(auth_plugin),
                     plugin_data: plugin_data.into(),
                 })
-            },
-            _ => {
-                Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid AuthSwitchRequest header"))
             }
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid AuthSwitchRequest header",
+            )),
         }
     }
 
-    pub fn auth_plugin(&self) -> &AuthPlugin {
+    pub fn auth_plugin(&self) -> &AuthPlugin<'_> {
         &self.auth_plugin
     }
 
@@ -898,7 +902,7 @@ impl<'a> AuthSwitchRequest<'a> {
 }
 
 /// Parses payload as an auth switch request packet.
-pub fn parse_auth_switch_request(payload: &[u8]) -> io::Result<AuthSwitchRequest> {
+pub fn parse_auth_switch_request(payload: &[u8]) -> io::Result<AuthSwitchRequest<'_>> {
     AuthSwitchRequest::parse(payload)
 }
 
@@ -917,13 +921,13 @@ pub struct HandshakePacket<'a> {
 }
 
 /// Parses payload as an initial handshake packet.
-pub fn parse_handshake_packet(payload: &[u8]) -> io::Result<HandshakePacket> {
+pub fn parse_handshake_packet(payload: &[u8]) -> io::Result<HandshakePacket<'_>> {
     HandshakePacket::parse(payload)
 }
 
 impl<'a> HandshakePacket<'a> {
     /// Parses payload as an initial handshake packet.
-    fn parse(mut payload: &[u8]) -> io::Result<HandshakePacket> {
+    fn parse(mut payload: &[u8]) -> io::Result<HandshakePacket<'_>> {
         let protocol_version = payload.read_u8()?;
         let mut nul_byte_pos = 0;
         for (i, byte) in payload.iter().enumerate() {
@@ -1007,7 +1011,7 @@ impl<'a> HandshakePacket<'a> {
 
     /// Value of the server_version field of an initial handshake packet as a string
     /// (lossy converted).
-    pub fn server_version_str(&self) -> Cow<str> {
+    pub fn server_version_str(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(self.server_version_ref())
     }
 
@@ -1085,7 +1089,7 @@ impl<'a> HandshakePacket<'a> {
 
     /// Value of the auth_plugin_name field of an initial handshake packet as a string
     /// (lossy converted).
-    pub fn auth_plugin_name_str(&self) -> Option<Cow<str>> {
+    pub fn auth_plugin_name_str(&self) -> Option<Cow<'_, str>> {
         self.auth_plugin
             .as_ref()
             .map(AuthPlugin::as_bytes)
@@ -1093,7 +1097,7 @@ impl<'a> HandshakePacket<'a> {
     }
 
     /// Auth plugin of a handshake packet
-    pub fn auth_plugin(&self) -> Option<&AuthPlugin> {
+    pub fn auth_plugin(&self) -> Option<&AuthPlugin<'_>> {
         self.auth_plugin.as_ref()
     }
 }
@@ -1109,7 +1113,7 @@ impl HandshakeResponse {
         server_version: (u16, u16, u16),
         user: Option<&str>,
         db_name: Option<&str>,
-        auth_plugin: AuthPlugin,
+        auth_plugin: AuthPlugin<'_>,
         client_flags: CapabilityFlags,
     ) -> HandshakeResponse {
         let plugin_auth = client_flags.contains(CapabilityFlags::CLIENT_PLUGIN_AUTH);
@@ -1255,7 +1259,9 @@ mod test {
         parse_handshake_packet, parse_local_infile_packet, parse_ok_packet, parse_stmt_packet,
         SessionStateChange,
     };
-    use constants::{CapabilityFlags, ColumnFlags, ColumnType, StatusFlags, UTF8_GENERAL_CI};
+    use crate::constants::{
+        CapabilityFlags, ColumnFlags, ColumnType, StatusFlags, UTF8_GENERAL_CI,
+    };
 
     #[test]
     fn should_parse_local_infile_packet() {
@@ -1387,24 +1393,15 @@ mod test {
                                  \x73\x73\x77\x6f\x72\x64\x00\x7a\x51\x67\x34\x69\x36\x6f\x4e\x79\
                                  \x36\x3d\x72\x48\x4e\x2f\x3e\x2d\x62\x29\x41\x00";
         let packet = parse_auth_switch_request(PAYLOAD).unwrap();
-        assert_eq!(
-            packet.auth_plugin().as_bytes(),
-            b"mysql_native_password",
-        );
-        assert_eq!(
-            packet.plugin_data(),
-            b"zQg4i6oNy6=rHN/>-b)A",
-        )
+        assert_eq!(packet.auth_plugin().as_bytes(), b"mysql_native_password",);
+        assert_eq!(packet.plugin_data(), b"zQg4i6oNy6=rHN/>-b)A",)
     }
 
     #[test]
     fn should_parse_auth_more_data() {
         const PAYLOAD: &[u8] = b"\x01\x04";
         let packet = parse_auth_more_data(PAYLOAD).unwrap();
-        assert_eq!(
-            packet.data(),
-            b"\x04",
-        );
+        assert_eq!(packet.data(), b"\x04",);
     }
 
     #[test]
