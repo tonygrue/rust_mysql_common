@@ -11,8 +11,8 @@ use crate::constants::{
     UTF8MB4_GENERAL_CI, UTF8_GENERAL_CI,
 };
 use crate::io::ReadMysqlExt;
-use atoi::atoi;
 use byteorder::{LittleEndian as LE, ReadBytesExt, WriteBytesExt};
+use lexical::parse;
 use regex::bytes::Regex;
 use std::borrow::Cow;
 use std::cmp::{max, min};
@@ -964,8 +964,8 @@ impl<'a> HandshakePacket<'a> {
                 (None, payload)
             };
         let auth_plugin_name = if capabilities.contains(CapabilityFlags::CLIENT_PLUGIN_AUTH) {
-            if payload[payload.len() - 1] == 0x00 {
-                Some(&payload[..payload.len() - 1])
+            if let Some(pos) = payload.iter().position(|&x| x == 0x00) {
+                Some(&payload[..pos])
             } else {
                 Some(payload)
             }
@@ -1024,9 +1024,9 @@ impl<'a> HandshakePacket<'a> {
             .map(|captures| {
                 // Should not panic because validated with regex
                 (
-                    atoi::<u16>(captures.get(1).unwrap().as_bytes()).unwrap(),
-                    atoi::<u16>(captures.get(2).unwrap().as_bytes()).unwrap(),
-                    atoi::<u16>(captures.get(3).unwrap().as_bytes()).unwrap(),
+                    parse::<u16, _>(captures.get(1).unwrap().as_bytes()),
+                    parse::<u16, _>(captures.get(2).unwrap().as_bytes()),
+                    parse::<u16, _>(captures.get(3).unwrap().as_bytes()),
                 )
             })
     }
@@ -1038,9 +1038,9 @@ impl<'a> HandshakePacket<'a> {
             .map(|captures| {
                 // Should not panic because validated with regex
                 (
-                    atoi::<u16>(captures.get(1).unwrap().as_bytes()).unwrap(),
-                    atoi::<u16>(captures.get(2).unwrap().as_bytes()).unwrap(),
-                    atoi::<u16>(captures.get(3).unwrap().as_bytes()).unwrap(),
+                    parse::<u16, _>(captures.get(1).unwrap().as_bytes()),
+                    parse::<u16, _>(captures.get(2).unwrap().as_bytes()),
+                    parse::<u16, _>(captures.get(3).unwrap().as_bytes()),
                 )
             })
     }
@@ -1301,7 +1301,7 @@ mod test {
                                \xff\x08\x02\x00\x0f\xc0\x15\x00\x00\x00\x00\x00\x00\x00\x00\x00\
                                \x00\x2b\x79\x44\x26\x2f\x5a\x5a\x33\x30\x35\x5a\x47\x00\x6d\x79\
                                \x73\x71\x6c\x5f\x6e\x61\x74\x69\x76\x65\x5f\x70\x61\x73\x73\x77\
-                               \x6f\x72\x64\x00";
+                               \x6f\x72\x64\x00\x00";
 
         let hsp = parse_handshake_packet(HSP).unwrap();
         assert_eq!(hsp.protocol_version, 0x0a);
