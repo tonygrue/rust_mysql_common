@@ -1683,3 +1683,569 @@ where
         ))
     }
 }
+
+
+
+
+
+impl<
+    T1,
+    Ir1,
+    T2,
+    Ir2,
+    T3,
+    Ir3,
+    T4,
+    Ir4,
+    T5,
+    Ir5,
+    T6,
+    Ir6,
+    T7,
+    Ir7,
+    T8,
+    Ir8,
+    T9,
+    Ir9,
+    T10,
+    Ir10,
+    T11,
+    Ir11,
+    T12,
+    Ir12,
+    T13,
+    Ir13,
+    T14,
+    Ir14,
+    T15,
+    Ir15,
+    T16,
+    Ir16
+> FromRow for (T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16)
+where
+    Ir1: ConvIr<T1>,
+    T1: FromValue<Intermediate = Ir1>,
+    Ir2: ConvIr<T2>,
+    T2: FromValue<Intermediate = Ir2>,
+    Ir3: ConvIr<T3>,
+    T3: FromValue<Intermediate = Ir3>,
+    Ir4: ConvIr<T4>,
+    T4: FromValue<Intermediate = Ir4>,
+    Ir5: ConvIr<T5>,
+    T5: FromValue<Intermediate = Ir5>,
+    Ir6: ConvIr<T6>,
+    T6: FromValue<Intermediate = Ir6>,
+    Ir7: ConvIr<T7>,
+    T7: FromValue<Intermediate = Ir7>,
+    Ir8: ConvIr<T8>,
+    T8: FromValue<Intermediate = Ir8>,
+    Ir9: ConvIr<T9>,
+    T9: FromValue<Intermediate = Ir9>,
+    Ir10: ConvIr<T10>,
+    T10: FromValue<Intermediate = Ir10>,
+    Ir11: ConvIr<T11>,
+    T11: FromValue<Intermediate = Ir11>,
+    Ir12: ConvIr<T12>,
+    T12: FromValue<Intermediate = Ir12>,
+    Ir13: ConvIr<T13>,
+    T13: FromValue<Intermediate = Ir13>,
+    Ir14: ConvIr<T14>,
+    T14: FromValue<Intermediate = Ir14>,
+    Ir15: ConvIr<T15>,
+    T15: FromValue<Intermediate = Ir15>,
+    Ir16: ConvIr<T16>,
+    T16: FromValue<Intermediate = Ir16>,
+{
+    #[inline]
+    fn from_row(row: Row) -> (T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16) {
+        match FromRow::from_row_opt(row) {
+            Ok(x) => x,
+            Err(FromRowError(row)) => {
+                panic!(
+                    "Couldn't convert {:?} to type (T1, .., T15). (see FromRow documentation)",
+                    row
+                )
+            }
+        }
+    }
+    fn from_row_opt(
+        mut row: Row,
+    ) -> Result<(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16), FromRowError> {
+        if row.len() != 16 {
+            return Err(FromRowError(row));
+        }
+        let ir1 = take_or_place!(row, 0, T1);
+        let ir2 = take_or_place!(row, 1, T2, [0, ir1]);
+        let ir3 = take_or_place!(row, 2, T3, [0, ir1], [1, ir2]);
+        let ir4 = take_or_place!(row, 3, T4, [0, ir1], [1, ir2], [2, ir3]);
+        let ir5 = take_or_place!(row, 4, T5, [0, ir1], [1, ir2], [2, ir3], [3, ir4]);
+        let ir6 = take_or_place!(row, 5, T6, [0, ir1], [1, ir2], [2, ir3], [3, ir4], [4, ir5]);
+        let ir7 = take_or_place!(
+            row,
+            6,
+            T7,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6]
+        );
+        let ir8 = take_or_place!(
+            row,
+            7,
+            T8,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7]
+        );
+        let ir9 = take_or_place!(
+            row,
+            8,
+            T9,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8]
+        );
+        let ir10 = take_or_place!(
+            row,
+            9,
+            T10,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9]
+        );
+        let ir11 = take_or_place!(
+            row,
+            10,
+            T11,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10]
+        );
+        let ir12 = take_or_place!(
+            row,
+            11,
+            T12,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10],
+            [10, ir11]
+        );
+        let ir13 = take_or_place!(
+            row,
+            12,
+            T13,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10],
+            [10, ir11],
+            [11, ir12]
+        );
+        let ir14 = take_or_place!(
+            row,
+            13,
+            T14,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10],
+            [10, ir11],
+            [11, ir12],
+            [12, ir13]
+        );
+        let ir15 = take_or_place!(
+            row,
+            14,
+            T15,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10],
+            [10, ir11],
+            [11, ir12],
+            [12, ir13],
+            [13, ir14]
+        );
+        let ir16 = take_or_place!(
+            row,
+            15,
+            T16,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10],
+            [10, ir11],
+            [11, ir12],
+            [12, ir13],
+            [13, ir14],
+            [14, ir15]
+        );
+        Ok((
+            ir1.commit(),
+            ir2.commit(),
+            ir3.commit(),
+            ir4.commit(),
+            ir5.commit(),
+            ir6.commit(),
+            ir7.commit(),
+            ir8.commit(),
+            ir9.commit(),
+            ir10.commit(),
+            ir11.commit(),
+            ir12.commit(),
+            ir13.commit(),
+            ir14.commit(),
+            ir15.commit(),
+            ir16.commit(),
+        ))
+    }
+}
+
+impl<
+    T1,
+    Ir1,
+    T2,
+    Ir2,
+    T3,
+    Ir3,
+    T4,
+    Ir4,
+    T5,
+    Ir5,
+    T6,
+    Ir6,
+    T7,
+    Ir7,
+    T8,
+    Ir8,
+    T9,
+    Ir9,
+    T10,
+    Ir10,
+    T11,
+    Ir11,
+    T12,
+    Ir12,
+    T13,
+    Ir13,
+    T14,
+    Ir14,
+    T15,
+    Ir15,
+    T16,
+    Ir16,
+    T17,
+    Ir17
+> FromRow for (T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17)
+where
+    Ir1: ConvIr<T1>,
+    T1: FromValue<Intermediate = Ir1>,
+    Ir2: ConvIr<T2>,
+    T2: FromValue<Intermediate = Ir2>,
+    Ir3: ConvIr<T3>,
+    T3: FromValue<Intermediate = Ir3>,
+    Ir4: ConvIr<T4>,
+    T4: FromValue<Intermediate = Ir4>,
+    Ir5: ConvIr<T5>,
+    T5: FromValue<Intermediate = Ir5>,
+    Ir6: ConvIr<T6>,
+    T6: FromValue<Intermediate = Ir6>,
+    Ir7: ConvIr<T7>,
+    T7: FromValue<Intermediate = Ir7>,
+    Ir8: ConvIr<T8>,
+    T8: FromValue<Intermediate = Ir8>,
+    Ir9: ConvIr<T9>,
+    T9: FromValue<Intermediate = Ir9>,
+    Ir10: ConvIr<T10>,
+    T10: FromValue<Intermediate = Ir10>,
+    Ir11: ConvIr<T11>,
+    T11: FromValue<Intermediate = Ir11>,
+    Ir12: ConvIr<T12>,
+    T12: FromValue<Intermediate = Ir12>,
+    Ir13: ConvIr<T13>,
+    T13: FromValue<Intermediate = Ir13>,
+    Ir14: ConvIr<T14>,
+    T14: FromValue<Intermediate = Ir14>,
+    Ir15: ConvIr<T15>,
+    T15: FromValue<Intermediate = Ir15>,
+    Ir16: ConvIr<T16>,
+    T16: FromValue<Intermediate = Ir16>,
+    Ir17: ConvIr<T17>,
+    T17: FromValue<Intermediate = Ir17>,
+{
+    #[inline]
+    fn from_row(row: Row) -> (T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17) {
+        match FromRow::from_row_opt(row) {
+            Ok(x) => x,
+            Err(FromRowError(row)) => {
+                panic!(
+                    "Couldn't convert {:?} to type (T1, .., T15). (see FromRow documentation)",
+                    row
+                )
+            }
+        }
+    }
+    fn from_row_opt(
+        mut row: Row,
+    ) -> Result<(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17), FromRowError> {
+        if row.len() != 17 {
+            return Err(FromRowError(row));
+        }
+        let ir1 = take_or_place!(row, 0, T1);
+        let ir2 = take_or_place!(row, 1, T2, [0, ir1]);
+        let ir3 = take_or_place!(row, 2, T3, [0, ir1], [1, ir2]);
+        let ir4 = take_or_place!(row, 3, T4, [0, ir1], [1, ir2], [2, ir3]);
+        let ir5 = take_or_place!(row, 4, T5, [0, ir1], [1, ir2], [2, ir3], [3, ir4]);
+        let ir6 = take_or_place!(row, 5, T6, [0, ir1], [1, ir2], [2, ir3], [3, ir4], [4, ir5]);
+        let ir7 = take_or_place!(
+            row,
+            6,
+            T7,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6]
+        );
+        let ir8 = take_or_place!(
+            row,
+            7,
+            T8,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7]
+        );
+        let ir9 = take_or_place!(
+            row,
+            8,
+            T9,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8]
+        );
+        let ir10 = take_or_place!(
+            row,
+            9,
+            T10,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9]
+        );
+        let ir11 = take_or_place!(
+            row,
+            10,
+            T11,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10]
+        );
+        let ir12 = take_or_place!(
+            row,
+            11,
+            T12,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10],
+            [10, ir11]
+        );
+        let ir13 = take_or_place!(
+            row,
+            12,
+            T13,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10],
+            [10, ir11],
+            [11, ir12]
+        );
+        let ir14 = take_or_place!(
+            row,
+            13,
+            T14,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10],
+            [10, ir11],
+            [11, ir12],
+            [12, ir13]
+        );
+        let ir15 = take_or_place!(
+            row,
+            14,
+            T15,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10],
+            [10, ir11],
+            [11, ir12],
+            [12, ir13],
+            [13, ir14]
+        );
+        let ir16 = take_or_place!(
+            row,
+            15,
+            T16,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10],
+            [10, ir11],
+            [11, ir12],
+            [12, ir13],
+            [13, ir14],
+            [14, ir15]
+        );
+        let ir17 = take_or_place!(
+            row,
+            16,
+            T17,
+            [0, ir1],
+            [1, ir2],
+            [2, ir3],
+            [3, ir4],
+            [4, ir5],
+            [5, ir6],
+            [6, ir7],
+            [7, ir8],
+            [8, ir9],
+            [9, ir10],
+            [10, ir11],
+            [11, ir12],
+            [12, ir13],
+            [13, ir14],
+            [14, ir15],
+            [15, ir16]
+        );
+        Ok((
+            ir1.commit(),
+            ir2.commit(),
+            ir3.commit(),
+            ir4.commit(),
+            ir5.commit(),
+            ir6.commit(),
+            ir7.commit(),
+            ir8.commit(),
+            ir9.commit(),
+            ir10.commit(),
+            ir11.commit(),
+            ir12.commit(),
+            ir13.commit(),
+            ir14.commit(),
+            ir15.commit(),
+            ir16.commit(),
+            ir17.commit(),
+        ))
+    }
+}
