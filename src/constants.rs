@@ -7,6 +7,8 @@
 // modified, or distributed except according to those terms.
 
 pub static MAX_PAYLOAD_LEN: usize = 16_777_215;
+pub static DEFAULT_MAX_ALLOWED_PACKET: usize = 4 * 1024 * 1024;
+pub static MIN_COMPRESS_LENGTH: usize = 50;
 
 pub static UTF8_GENERAL_CI: u16 = 33;
 pub static UTF8MB4_GENERAL_CI: u16 = 45;
@@ -69,10 +71,10 @@ bitflags! {
     /// Client capability flags
     pub struct CapabilityFlags: u32 {
         /// Use the improved version of Old Password Authentication. Assumed to be set since 4.1.1.
-        const CLIENT_LONG_PASSWORD                  = 0x00000001;
+        const CLIENT_LONG_PASSWORD                  = 0x0000_0001;
 
         /// Send found rows instead of affected rows in EOF_Packet.
-        const CLIENT_FOUND_ROWS                     = 0x00000002;
+        const CLIENT_FOUND_ROWS                     = 0x0000_0002;
 
         /// Get all column flags.
         /// Longer flags in Protocol::ColumnDefinition320.
@@ -82,7 +84,7 @@ bitflags! {
         ///
         /// ### Client
         /// Expects longer flags.
-        const CLIENT_LONG_FLAG                      = 0x00000004;
+        const CLIENT_LONG_FLAG                      = 0x0000_0004;
 
         /// Database (schema) name can be specified on connect in Handshake Response Packet.
         /// ### Server
@@ -90,10 +92,10 @@ bitflags! {
         ///
         /// ### Client
         /// Handshake Response Packet contains a schema-name.
-        const CLIENT_CONNECT_WITH_DB                = 0x00000008;
+        const CLIENT_CONNECT_WITH_DB                = 0x0000_0008;
 
         /// Don't allow database.table.column.
-        const CLIENT_NO_SCHEMA                      = 0x00000010;
+        const CLIENT_NO_SCHEMA                      = 0x0000_0010;
 
         /// Compression protocol supported.
         ///
@@ -102,10 +104,10 @@ bitflags! {
         ///
         /// ### Client
         /// Switches to Compression compressed protocol after successful authentication.
-        const CLIENT_COMPRESS                       = 0x00000020;
+        const CLIENT_COMPRESS                       = 0x0000_0020;
 
         /// Special handling of ODBC behavior.
-        const CLIENT_ODBC                           = 0x00000040;
+        const CLIENT_ODBC                           = 0x0000_0040;
 
         /// Can use LOAD DATA LOCAL.
         ///
@@ -114,7 +116,7 @@ bitflags! {
         ///
         /// ### Client
         /// Will handle LOCAL INFILE request.
-        const CLIENT_LOCAL_FILES                    = 0x00000080;
+        const CLIENT_LOCAL_FILES                    = 0x0000_0080;
 
         /// Ignore spaces before '('.
         ///
@@ -123,9 +125,9 @@ bitflags! {
         ///
         /// ### Client
         /// Let the parser ignore spaces before '('.
-        const CLIENT_IGNORE_SPACE                   = 0x00000100;
+        const CLIENT_IGNORE_SPACE                   = 0x0000_0100;
 
-        const CLIENT_PROTOCOL_41                    = 0x00000200;
+        const CLIENT_PROTOCOL_41                    = 0x0000_0200;
 
         /// This is an interactive client.
         /// Use System_variables::net_wait_timeout versus System_variables::net_interactive_timeout.
@@ -135,7 +137,7 @@ bitflags! {
         ///
         /// ### Client
         /// Client is interactive.
-        const CLIENT_INTERACTIVE                    = 0x00000400;
+        const CLIENT_INTERACTIVE                    = 0x0000_0400;
 
         /// Use SSL encryption for the session.
         ///
@@ -144,13 +146,13 @@ bitflags! {
         ///
         /// ### Client
         /// Switch to SSL after sending the capability-flags.
-        const CLIENT_SSL                            = 0x00000800;
+        const CLIENT_SSL                            = 0x0000_0800;
 
         /// Client only flag. Not used.
         ///
         /// ### Client
         /// Do not issue SIGPIPE if network failures occur (libmysqlclient only).
-        const CLIENT_IGNORE_SIGPIPE                 = 0x00001000;
+        const CLIENT_IGNORE_SIGPIPE                 = 0x0000_1000;
 
         /// Client knows about transactions.
         ///
@@ -162,11 +164,11 @@ bitflags! {
         ///
         /// ### Note
         /// This flag is optional in 3.23, but always set by the server since 4.0.
-        const CLIENT_TRANSACTIONS                   = 0x00002000;
+        const CLIENT_TRANSACTIONS                   = 0x0000_2000;
 
-        const CLIENT_RESERVED                       = 0x00004000;
+        const CLIENT_RESERVED                       = 0x0000_4000;
 
-        const CLIENT_SECURE_CONNECTION              = 0x00008000;
+        const CLIENT_SECURE_CONNECTION              = 0x0000_8000;
 
         /// Enable/disable multi-stmt support.
         /// Also sets CLIENT_MULTI_RESULTS. Currently not checked anywhere.
@@ -176,7 +178,7 @@ bitflags! {
         ///
         /// ### Client
         /// May send multiple statements per COM_QUERY and COM_STMT_PREPARE.
-        const CLIENT_MULTI_STATEMENTS               = 0x00010000;
+        const CLIENT_MULTI_STATEMENTS               = 0x0001_0000;
 
         /// Enable/disable multi-results.
         ///
@@ -189,7 +191,7 @@ bitflags! {
         ///
         /// ### Requires
         /// `CLIENT_PROTOCOL_41`
-        const CLIENT_MULTI_RESULTS                  = 0x00020000;
+        const CLIENT_MULTI_RESULTS                  = 0x0002_0000;
 
         /// Multi-results and OUT parameters in PS-protocol.
         ///
@@ -201,7 +203,7 @@ bitflags! {
         ///
         /// ### Requires
         /// `CLIENT_PROTOCOL_41`
-        const CLIENT_PS_MULTI_RESULTS               = 0x00040000;
+        const CLIENT_PS_MULTI_RESULTS               = 0x0004_0000;
 
         /// Client supports plugin authentication.
         ///
@@ -214,7 +216,7 @@ bitflags! {
         ///
         /// ### Requires
         /// `CLIENT_PROTOCOL_41`
-        const CLIENT_PLUGIN_AUTH                    = 0x00080000;
+        const CLIENT_PLUGIN_AUTH                    = 0x0008_0000;
 
         /// Client supports connection attributes.
         ///
@@ -223,7 +225,7 @@ bitflags! {
         ///
         /// ### Client
         /// Sends connection attributes in Protocol::HandshakeResponse41.
-        const CLIENT_CONNECT_ATTRS                  = 0x00100000;
+        const CLIENT_CONNECT_ATTRS                  = 0x0010_0000;
 
         /// Enable authentication response packet to be larger than 255 bytes.
         /// When the ability to change default plugin require that the initial password
@@ -243,7 +245,7 @@ bitflags! {
         ///
         /// ### Note
         /// The flag was introduced in 5.6.6, but had the wrong value.
-        const CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA = 0x00200000;
+        const CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA = 0x0020_0000;
 
         /// Don't close the connection for a user account with expired password.
         ///
@@ -252,7 +254,7 @@ bitflags! {
         ///
         /// ### Client
         /// Can handle expired passwords.
-        const CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS   = 0x00400000;
+        const CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS   = 0x0040_0000;
 
         /// Capable of handling server state change information.
         /// Its a hint to the server to include the state change information in OK_Packet.
@@ -263,7 +265,7 @@ bitflags! {
         ///
         /// ### Client
         /// Expects the server to send Session State Information in a OK_Packet.
-        const CLIENT_SESSION_TRACK                  = 0x00800000;
+        const CLIENT_SESSION_TRACK                  = 0x0080_0000;
 
         /// Client no longer needs EOF_Packet and will use OK_Packet instead.
         ///
@@ -281,18 +283,18 @@ bitflags! {
         ///
         /// Therefore, the EOF_Packet in the Text Resultset is replaced with an OK_Packet.
         /// EOF_Packet is deprecated as of MySQL 5.7.5.
-        const CLIENT_DEPRECATE_EOF                  = 0x01000000;
+        const CLIENT_DEPRECATE_EOF                  = 0x0100_0000;
 
         /// Client or server supports progress reports within error packet.
-        const CLIENT_PROGRESS_OBSOLETE              = 0x20000000;
+        const CLIENT_PROGRESS_OBSOLETE              = 0x2000_0000;
 
         /// Verify server certificate. Client only flag.
         ///
         /// Deprecated in favor of –ssl-mode.
-        const CLIENT_SSL_VERIFY_SERVER_CERT         = 0x40000000;
+        const CLIENT_SSL_VERIFY_SERVER_CERT         = 0x4000_0000;
 
         /// Don't reset the options after an unsuccessful connect. Client only flag.
-        const CLIENT_REMEMBER_OPTIONS               = 0x80000000;
+        const CLIENT_REMEMBER_OPTIONS               = 0x8000_0000;
     }
 }
 
@@ -441,7 +443,7 @@ pub enum ColumnType {
     MYSQL_TYPE_TIME,
     MYSQL_TYPE_DATETIME,
     MYSQL_TYPE_YEAR,
-    MYSQL_TYPE_NEWDATE,
+    MYSQL_TYPE_NEWDATE, // Internal to MySql
     MYSQL_TYPE_VARCHAR,
     MYSQL_TYPE_BIT,
     MYSQL_TYPE_TIMESTAMP2,

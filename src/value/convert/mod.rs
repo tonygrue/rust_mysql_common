@@ -6,16 +6,24 @@
 // option. All files in the project carrying such notice may not be copied,
 // modified, or distributed except according to those terms.
 
-use crate::value::Value;
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
-use lexical::{parse, try_parse};
+use lexical::parse;
+use num_traits::{FromPrimitive, ToPrimitive};
 use regex::bytes::Regex;
+use time::{self, at, strptime, Timespec, Tm};
+use uuid::Uuid;
+
+use std::any::type_name;
 use std::error::Error;
 use std::fmt;
 use std::str::from_utf8;
 use std::time::Duration;
-use time::{self, at, strptime, Timespec, Tm};
-use uuid::Uuid;
+
+use crate::value::Value;
+
+mod bigdecimal;
+mod bigint;
+mod decimal;
 
 lazy_static! {
     static ref DATETIME_RE_YMD: Regex = { Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap() };
@@ -100,9 +108,10 @@ pub trait FromValue: Sized {
 
     /// Will panic if could not convert `v` to `Self`.
     fn from_value(v: Value) -> Self {
-        Self::from_value_opt(v)
-            .ok()
-            .expect("Could not retrieve Self from Value")
+        match Self::from_value_opt(v) {
+            Ok(this) => this,
+            Err(_) => panic!("Could not retrieve {} from Value", type_name::<Self>()),
+        }
     }
 
     /// Will return `Err(Error::FromValueError(v))` if could not convert `v` to `Self`.
@@ -130,41 +139,39 @@ pub fn from_value_opt<T: FromValue>(v: Value) -> Result<T, FromValueError> {
 }
 
 macro_rules! impl_from_value {
-    ($ty:ty, $ir:ty, $msg:expr) => {
+    ($ty:ty, $ir:ty) => {
         impl FromValue for $ty {
             type Intermediate = $ir;
-            fn from_value(v: Value) -> $ty {
-                <Self as FromValue>::from_value_opt(v).ok().expect($msg)
-            }
         }
     };
 }
 
 macro_rules! impl_from_value_num {
-    ($t:ident, $msg:expr) => {
+    ($t:ident) => {
         impl ConvIr<$t> for ParseIr<$t> {
             fn new(v: Value) -> Result<ParseIr<$t>, FromValueError> {
                 match v {
                     Value::Int(x) => {
-                        let min = ::std::$t::MIN as i64;
-                        let mut max = ::std::$t::MAX as i64;
-                        if max < 0 {
-                            max = ::std::i64::MAX;
-                        }
-                        if min <= x && x <= max {
+                        if let Some(output) = $t::from_i64(x) {
                             Ok(ParseIr {
                                 value: Value::Int(x),
-                                output: x as $t,
+                                output,
                             })
                         } else {
                             Err(FromValueError(Value::Int(x)))
                         }
                     }
-                    Value::UInt(x) if x <= ::std::$t::MAX as u64 => Ok(ParseIr {
-                        value: Value::UInt(x),
-                        output: x as $t,
-                    }),
-                    Value::Bytes(bytes) => match try_parse(&*bytes) {
+                    Value::UInt(x) => {
+                        if let Some(output) = $t::from_u64(x) {
+                            Ok(ParseIr {
+                                value: Value::UInt(x),
+                                output,
+                            })
+                        } else {
+                            Err(FromValueError(Value::UInt(x)))
+                        }
+                    }
+                    Value::Bytes(bytes) => match parse(&*bytes) {
                         Ok(x) => Ok(ParseIr {
                             value: Value::Bytes(bytes),
                             output: x,
@@ -182,7 +189,7 @@ macro_rules! impl_from_value_num {
             }
         }
 
-        impl_from_value!($t, ParseIr<$t>, $msg);
+        impl_from_value!($t, ParseIr<$t>);
     };
 }
 
@@ -236,11 +243,6 @@ where
     T: FromValue,
 {
     type Intermediate = OptionIr<T::Intermediate>;
-    fn from_value(v: Value) -> Option<T> {
-        <Self as FromValue>::from_value_opt(v)
-            .ok()
-            .expect("Could not retrieve Option<T> from Value")
-    }
 }
 
 impl ConvIr<Value> for Value {
@@ -277,7 +279,7 @@ impl ConvIr<String> for StringIr {
     fn new(v: Value) -> Result<StringIr, FromValueError> {
         match v {
             Value::Bytes(bytes) => match from_utf8(&*bytes) {
-                Ok(_) => Ok(StringIr { bytes: bytes }),
+                Ok(_) => Ok(StringIr { bytes }),
                 Err(_) => Err(FromValueError(Value::Bytes(bytes))),
             },
             v => Err(FromValueError(v)),
@@ -309,7 +311,7 @@ impl ConvIr<i64> for ParseIr<i64> {
                 value: Value::UInt(x),
                 output: x as i64,
             }),
-            Value::Bytes(bytes) => match try_parse(&*bytes) {
+            Value::Bytes(bytes) => match parse(&*bytes) {
                 Ok(x) => Ok(ParseIr {
                     value: Value::Bytes(bytes),
                     output: x,
@@ -338,7 +340,7 @@ impl ConvIr<u64> for ParseIr<u64> {
                 value: Value::UInt(x),
                 output: x,
             }),
-            Value::Bytes(bytes) => match try_parse(&*bytes) {
+            Value::Bytes(bytes) => match parse(&*bytes) {
                 Ok(x) => Ok(ParseIr {
                     value: Value::Bytes(bytes),
                     output: x,
@@ -359,14 +361,16 @@ impl ConvIr<u64> for ParseIr<u64> {
 impl ConvIr<f32> for ParseIr<f32> {
     fn new(v: Value) -> Result<ParseIr<f32>, FromValueError> {
         match v {
-            Value::Float(x) if x >= ::std::f32::MIN as f64 && x <= ::std::f32::MAX as f64 => {
+            Value::Float(x)
+                if x >= f64::from(::std::f32::MIN) && x <= f64::from(::std::f32::MAX) =>
+            {
                 Ok(ParseIr {
                     value: Value::Float(x),
                     output: x as f32,
                 })
             }
             Value::Bytes(bytes) => {
-                let val = try_parse(&*bytes).ok();
+                let val = parse(&*bytes).ok();
                 match val {
                     Some(x) => Ok(ParseIr {
                         value: Value::Bytes(bytes),
@@ -394,7 +398,7 @@ impl ConvIr<f64> for ParseIr<f64> {
                 output: x,
             }),
             Value::Bytes(bytes) => {
-                let val = try_parse(&*bytes).ok();
+                let val = parse(&*bytes).ok();
                 match val {
                     Some(x) => Ok(ParseIr {
                         value: Value::Bytes(bytes),
@@ -462,7 +466,7 @@ pub struct BytesIr {
 impl ConvIr<Vec<u8>> for BytesIr {
     fn new(v: Value) -> Result<BytesIr, FromValueError> {
         match v {
-            Value::Bytes(bytes) => Ok(BytesIr { bytes: bytes }),
+            Value::Bytes(bytes) => Ok(BytesIr { bytes }),
             v => Err(FromValueError(v)),
         }
     }
@@ -475,20 +479,20 @@ impl ConvIr<Vec<u8>> for BytesIr {
 }
 
 impl ConvIr<Timespec> for ParseIr<Timespec> {
-    fn new(v: Value) -> Result<ParseIr<Timespec>, FromValueError> {
+    fn new(value: Value) -> Result<ParseIr<Timespec>, FromValueError> {
         let tm_utcoff = at(Timespec::new(0, 0)).tm_utcoff;
-        match v {
+        match value {
             Value::Date(y, m, d, h, i, s, u) => Ok(ParseIr {
                 value: Value::Date(y, m, d, h, i, s, u),
                 output: Tm {
-                    tm_year: y as i32 - 1_900,
-                    tm_mon: m as i32 - 1,
-                    tm_mday: d as i32,
-                    tm_hour: h as i32,
-                    tm_min: i as i32,
-                    tm_sec: s as i32,
+                    tm_year: i32::from(y) - 1_900,
+                    tm_mon: i32::from(m) - 1,
+                    tm_mday: d.into(),
+                    tm_hour: h.into(),
+                    tm_min: i.into(),
+                    tm_sec: s.into(),
                     tm_nsec: u as i32 * 1_000,
-                    tm_utcoff: tm_utcoff,
+                    tm_utcoff,
                     tm_wday: 0,
                     tm_yday: 0,
                     tm_isdst: -1,
@@ -500,7 +504,7 @@ impl ConvIr<Timespec> for ParseIr<Timespec> {
                     .ok()
                     .and_then(|s| {
                         strptime(s, "%Y-%m-%d %H:%M:%S")
-                            .or(strptime(s, "%Y-%m-%d"))
+                            .or_else(|_| strptime(s, "%Y-%m-%d"))
                             .ok()
                     })
                     .map(|mut tm| {
@@ -528,11 +532,11 @@ impl ConvIr<Timespec> for ParseIr<Timespec> {
 }
 
 impl ConvIr<NaiveDateTime> for ParseIr<NaiveDateTime> {
-    fn new(v: Value) -> Result<ParseIr<NaiveDateTime>, FromValueError> {
-        let result = match v {
+    fn new(value: Value) -> Result<ParseIr<NaiveDateTime>, FromValueError> {
+        let result = match value {
             Value::Date(y, m, d, h, i, s, u) => {
-                let date = NaiveDate::from_ymd_opt(y as i32, m as u32, d as u32);
-                let time = NaiveTime::from_hms_micro_opt(h as u32, i as u32, s as u32, u);
+                let date = NaiveDate::from_ymd_opt(y.into(), m.into(), d.into());
+                let time = NaiveTime::from_hms_micro_opt(h.into(), i.into(), s.into(), u);
                 Ok((date, time, Value::Date(y, m, d, h, i, s, u)))
             }
             Value::Bytes(bytes) => {
@@ -567,10 +571,10 @@ impl ConvIr<NaiveDateTime> for ParseIr<NaiveDateTime> {
 }
 
 impl ConvIr<NaiveDate> for ParseIr<NaiveDate> {
-    fn new(v: Value) -> Result<ParseIr<NaiveDate>, FromValueError> {
-        let result = match v {
+    fn new(value: Value) -> Result<ParseIr<NaiveDate>, FromValueError> {
+        let result = match value {
             Value::Date(y, m, d, h, i, s, u) => {
-                let date = NaiveDate::from_ymd_opt(y as i32, m as u32, d as u32);
+                let date = NaiveDate::from_ymd_opt(y.into(), m.into(), d.into());
                 Ok((date, Value::Date(y, m, d, h, i, s, u)))
             }
             Value::Bytes(bytes) => {
@@ -588,7 +592,7 @@ impl ConvIr<NaiveDate> for ParseIr<NaiveDate> {
 
         if date.is_some() {
             Ok(ParseIr {
-                value: value,
+                value,
                 output: date.unwrap(),
             })
         } else {
@@ -605,7 +609,7 @@ impl ConvIr<NaiveDate> for ParseIr<NaiveDate> {
 
 #[inline]
 fn parse_micros(micros_bytes: &[u8]) -> u32 {
-    let mut micros = parse(micros_bytes);
+    let mut micros = parse(micros_bytes).unwrap();
 
     let mut pad_zero_cnt = 0;
     for b in micros_bytes.iter() {
@@ -667,12 +671,12 @@ fn parse_mysql_datetime_string(bytes: &[u8]) -> Option<(u32, u32, u32, u32, u32,
     };
 
     Some((
-        parse(&bytes[year]),
-        parse(&bytes[month]),
-        parse(&bytes[day]),
-        hour.map(|pos| parse(&bytes[pos])).unwrap_or(0),
-        minute.map(|pos| parse(&bytes[pos])).unwrap_or(0),
-        second.map(|pos| parse(&bytes[pos])).unwrap_or(0),
+        parse(&bytes[year]).unwrap(),
+        parse(&bytes[month]).unwrap(),
+        parse(&bytes[day]).unwrap(),
+        hour.map(|pos| parse(&bytes[pos]).unwrap()).unwrap_or(0),
+        minute.map(|pos| parse(&bytes[pos]).unwrap()).unwrap_or(0),
+        second.map(|pos| parse(&bytes[pos]).unwrap()).unwrap_or(0),
         micros.map(|pos| parse_micros(&bytes[pos])).unwrap_or(0),
     ))
 }
@@ -720,18 +724,18 @@ fn parse_mysql_time_string(mut bytes: &[u8]) -> Option<(bool, u32, u32, u32, u32
 
     Some((
         is_neg,
-        parse(&bytes[hour_pos]),
-        parse(&bytes[min_pos]),
-        parse(&bytes[sec_pos]),
+        parse(&bytes[hour_pos]).unwrap(),
+        parse(&bytes[min_pos]).unwrap(),
+        parse(&bytes[sec_pos]).unwrap(),
         micros_pos.map(|pos| parse_micros(&bytes[pos])).unwrap_or(0),
     ))
 }
 
 impl ConvIr<NaiveTime> for ParseIr<NaiveTime> {
-    fn new(v: Value) -> Result<ParseIr<NaiveTime>, FromValueError> {
-        let result = match v {
+    fn new(value: Value) -> Result<ParseIr<NaiveTime>, FromValueError> {
+        let result = match value {
             Value::Time(false, 0, h, m, s, u) => {
-                let time = NaiveTime::from_hms_micro_opt(h as u32, m as u32, s as u32, u);
+                let time = NaiveTime::from_hms_micro_opt(h.into(), m.into(), s.into(), u);
                 Ok((time, Value::Time(false, 0, h, m, s, u)))
             }
             Value::Bytes(bytes) => {
@@ -749,7 +753,7 @@ impl ConvIr<NaiveTime> for ParseIr<NaiveTime> {
 
         if time.is_some() {
             Ok(ParseIr {
-                value: value,
+                value,
                 output: time.unwrap(),
             })
         } else {
@@ -769,10 +773,10 @@ impl ConvIr<Duration> for ParseIr<Duration> {
         match v {
             Value::Time(false, days, hours, minutes, seconds, microseconds) => {
                 let nanos = (microseconds as u32) * 1000;
-                let secs = seconds as u64
-                    + minutes as u64 * 60
-                    + hours as u64 * 60 * 60
-                    + days as u64 * 60 * 60 * 24;
+                let secs = u64::from(seconds)
+                    + u64::from(minutes) * 60
+                    + u64::from(hours) * 60 * 60
+                    + u64::from(days) * 60 * 60 * 24;
                 Ok(ParseIr {
                     value: Value::Time(false, days, hours, minutes, seconds, microseconds),
                     output: Duration::new(secs, nanos),
@@ -782,7 +786,9 @@ impl ConvIr<Duration> for ParseIr<Duration> {
                 let duration = match parse_mysql_time_string(&*val_bytes) {
                     Some((false, hours, minutes, seconds, microseconds)) => {
                         let nanos = microseconds * 1000;
-                        let secs = seconds as u64 + minutes as u64 * 60 + hours as u64 * 60 * 60;
+                        let secs = u64::from(seconds)
+                            + u64::from(minutes) * 60
+                            + u64::from(hours) * 60 * 60;
                         Duration::new(secs, nanos)
                     }
                     _ => return Err(FromValueError(Value::Bytes(val_bytes))),
@@ -807,11 +813,11 @@ impl ConvIr<time::Duration> for ParseIr<time::Duration> {
     fn new(v: Value) -> Result<ParseIr<time::Duration>, FromValueError> {
         match v {
             Value::Time(is_neg, days, hours, minutes, seconds, microseconds) => {
-                let duration = time::Duration::days(days as i64)
-                    + time::Duration::hours(hours as i64)
-                    + time::Duration::minutes(minutes as i64)
-                    + time::Duration::seconds(seconds as i64)
-                    + time::Duration::microseconds(microseconds as i64);
+                let duration = time::Duration::days(days.into())
+                    + time::Duration::hours(hours.into())
+                    + time::Duration::minutes(minutes.into())
+                    + time::Duration::seconds(seconds.into())
+                    + time::Duration::microseconds(microseconds.into());
                 Ok(ParseIr {
                     value: Value::Time(is_neg, days, hours, minutes, seconds, microseconds),
                     output: if is_neg { -duration } else { duration },
@@ -820,10 +826,10 @@ impl ConvIr<time::Duration> for ParseIr<time::Duration> {
             Value::Bytes(val_bytes) => {
                 let duration = match parse_mysql_time_string(&*val_bytes) {
                     Some((is_neg, hours, minutes, seconds, microseconds)) => {
-                        let duration = time::Duration::hours(hours as i64)
-                            + time::Duration::minutes(minutes as i64)
-                            + time::Duration::seconds(seconds as i64)
-                            + time::Duration::microseconds(microseconds as i64);
+                        let duration = time::Duration::hours(hours.into())
+                            + time::Duration::minutes(minutes.into())
+                            + time::Duration::seconds(seconds.into())
+                            + time::Duration::microseconds(microseconds.into());
                         if is_neg {
                             -duration
                         } else {
@@ -848,51 +854,29 @@ impl ConvIr<time::Duration> for ParseIr<time::Duration> {
     }
 }
 
-impl_from_value!(
-    NaiveDateTime,
-    ParseIr<NaiveDateTime>,
-    "Could not retrieve NaiveDateTime from Value"
-);
-impl_from_value!(
-    NaiveDate,
-    ParseIr<NaiveDate>,
-    "Could not retrieve NaiveDate from Value"
-);
-impl_from_value!(
-    NaiveTime,
-    ParseIr<NaiveTime>,
-    "Could not retrieve NaiveTime from Value"
-);
-impl_from_value!(
-    Timespec,
-    ParseIr<Timespec>,
-    "Could not retrieve Timespec from Value"
-);
-impl_from_value!(
-    Duration,
-    ParseIr<Duration>,
-    "Could not retrieve Duration from Value"
-);
-impl_from_value!(
-    time::Duration,
-    ParseIr<time::Duration>,
-    "Could not retrieve time::Duration from Value"
-);
-impl_from_value!(String, StringIr, "Could not retrieve String from Value");
-impl_from_value!(Vec<u8>, BytesIr, "Could not retrieve Vec<u8> from Value");
-impl_from_value!(bool, ParseIr<bool>, "Could not retrieve bool from Value");
-impl_from_value!(i64, ParseIr<i64>, "Could not retrieve i64 from Value");
-impl_from_value!(u64, ParseIr<u64>, "Could not retrieve u64 from Value");
-impl_from_value!(f32, ParseIr<f32>, "Could not retrieve f32 from Value");
-impl_from_value!(f64, ParseIr<f64>, "Could not retrieve f64 from Value");
-impl_from_value_num!(i8, "Could not retrieve i8 from Value");
-impl_from_value_num!(u8, "Could not retrieve u8 from Value");
-impl_from_value_num!(i16, "Could not retrieve i16 from Value");
-impl_from_value_num!(u16, "Could not retrieve u16 from Value");
-impl_from_value_num!(i32, "Could not retrieve i32 from Value");
-impl_from_value_num!(u32, "Could not retrieve u32 from Value");
-impl_from_value_num!(isize, "Could not retrieve isize from Value");
-impl_from_value_num!(usize, "Could not retrieve usize from Value");
+impl_from_value!(NaiveDateTime, ParseIr<NaiveDateTime>);
+impl_from_value!(NaiveDate, ParseIr<NaiveDate>);
+impl_from_value!(NaiveTime, ParseIr<NaiveTime>);
+impl_from_value!(Timespec, ParseIr<Timespec>);
+impl_from_value!(Duration, ParseIr<Duration>);
+impl_from_value!(time::Duration, ParseIr<time::Duration>);
+impl_from_value!(String, StringIr);
+impl_from_value!(Vec<u8>, BytesIr);
+impl_from_value!(bool, ParseIr<bool>);
+impl_from_value!(i64, ParseIr<i64>);
+impl_from_value!(u64, ParseIr<u64>);
+impl_from_value!(f32, ParseIr<f32>);
+impl_from_value!(f64, ParseIr<f64>);
+impl_from_value_num!(i8);
+impl_from_value_num!(u8);
+impl_from_value_num!(i16);
+impl_from_value_num!(u16);
+impl_from_value_num!(i32);
+impl_from_value_num!(u32);
+impl_from_value_num!(isize);
+impl_from_value_num!(usize);
+impl_from_value_num!(i128);
+impl_from_value_num!(u128);
 
 pub trait ToValue {
     fn to_value(&self) -> Value;
@@ -920,52 +904,58 @@ impl<T: Into<Value>> From<Option<T>> for Value {
 }
 
 macro_rules! into_value_impl (
-    (u64) => (
-        impl From<u64> for Value {
-            fn from(x: u64) -> Value {
-                Value::UInt(x)
-            }
-        }
-    );
-    (i64) => (
-        impl From<i64> for Value {
-            fn from(x: i64) -> Value {
-                Value::Int(x)
-            }
-        }
-    );
-    ($t:ty) => (
+    (signed $t:ty) => (
         impl From<$t> for Value {
             fn from(x: $t) -> Value {
                 Value::Int(x as i64)
             }
         }
     );
+    (unsigned $t:ty) => (
+        impl From<$t> for Value {
+            fn from(x: $t) -> Value {
+                Value::UInt(x as u64)
+            }
+        }
+    );
 );
 
-into_value_impl!(i8);
-into_value_impl!(u8);
-into_value_impl!(i16);
-into_value_impl!(u16);
-into_value_impl!(i32);
-into_value_impl!(u32);
-into_value_impl!(i64);
-into_value_impl!(u64);
-into_value_impl!(isize);
+into_value_impl!(signed i8);
+into_value_impl!(signed i16);
+into_value_impl!(signed i32);
+into_value_impl!(signed i64);
+into_value_impl!(signed isize);
+into_value_impl!(unsigned u8);
+into_value_impl!(unsigned u16);
+into_value_impl!(unsigned u32);
+into_value_impl!(unsigned u64);
+into_value_impl!(unsigned usize);
 
-impl From<usize> for Value {
-    fn from(x: usize) -> Value {
-        if x as u64 <= ::std::i64::MAX as u64 {
-            Value::Int(x as i64)
+impl From<i128> for Value {
+    fn from(x: i128) -> Value {
+        if let Some(x) = x.to_i64() {
+            Value::Int(x)
+        } else if let Some(x) = x.to_u64() {
+            Value::UInt(x)
         } else {
-            Value::UInt(x as u64)
+            Value::Bytes(x.to_string().into())
+        }
+    }
+}
+
+impl From<u128> for Value {
+    fn from(x: u128) -> Value {
+        if let Some(x) = x.to_u64() {
+            Value::UInt(x)
+        } else {
+            Value::Bytes(x.to_string().into())
         }
     }
 }
 
 impl From<f32> for Value {
     fn from(x: f32) -> Value {
-        Value::Float(x as f64)
+        Value::Float(x.into())
     }
 }
 
@@ -1063,13 +1053,13 @@ impl From<Timespec> for Value {
 impl From<Duration> for Value {
     fn from(x: Duration) -> Value {
         let mut secs_total = x.as_secs();
-        let micros = (x.subsec_nanos() as f64 / 1000_f64).round() as u32;
+        let micros = (f64::from(x.subsec_nanos()) / 1000_f64).round() as u32;
         let seconds = (secs_total % 60) as u8;
-        secs_total -= seconds as u64;
+        secs_total -= u64::from(seconds);
         let minutes = ((secs_total % (60 * 60)) / 60) as u8;
-        secs_total -= (minutes as u64) * 60;
+        secs_total -= u64::from(minutes) * 60;
         let hours = ((secs_total % (60 * 60 * 24)) / (60 * 60)) as u8;
-        secs_total -= (hours as u64) * 60 * 60;
+        secs_total -= u64::from(hours) * 60 * 60;
         Value::Time(
             false,
             (secs_total / (60 * 60 * 24)) as u32,
@@ -1144,9 +1134,9 @@ from_array_impl!(30);
 from_array_impl!(31);
 from_array_impl!(32);
 
-impl Into<Value> for Uuid {
-    fn into(self) -> Value {
-        Value::Bytes(self.as_bytes().to_vec())
+impl From<Uuid> for Value {
+    fn from(uuid: Uuid) -> Value {
+        Value::Bytes(uuid.as_bytes().to_vec())
     }
 }
 
@@ -1161,10 +1151,7 @@ impl ConvIr<Uuid> for UuidIr {
     fn new(v: Value) -> Result<UuidIr, FromValueError> {
         match v {
             Value::Bytes(bytes) => match Uuid::from_slice(bytes.as_slice()) {
-                Ok(val) => Ok(UuidIr {
-                    val: val,
-                    bytes: bytes,
-                }),
+                Ok(val) => Ok(UuidIr { val, bytes }),
                 Err(_) => Err(FromValueError(Value::Bytes(bytes))),
             },
             v => Err(FromValueError(v)),
@@ -1186,6 +1173,42 @@ impl FromValue for Uuid {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    macro_rules! signed_primitive_roundtrip {
+        ($t:ty, $name:ident) => {
+            proptest! {
+                #[test]
+                fn $name(n: $t) {
+                    let val = Value::Int(n as i64);
+                    let val_bytes = Value::Bytes(n.to_string().into());
+                    assert_eq!(Value::from(from_value::<$t>(val.clone())), val);
+                    assert_eq!(Value::from(from_value::<$t>(val_bytes.clone())), val);
+                    if n >= 0 {
+                        let val_uint = Value::UInt(n as u64);
+                        assert_eq!(Value::from(from_value::<$t>(val_uint.clone())), val);
+                    }
+                }
+            }
+        };
+    }
+
+    macro_rules! unsigned_primitive_roundtrip {
+        ($t:ty, $name:ident) => {
+            proptest! {
+                #[test]
+                fn $name(n: $t) {
+                    let val = Value::UInt(n as u64);
+                    let val_bytes = Value::Bytes(n.to_string().into());
+                    assert_eq!(Value::from(from_value::<$t>(val.clone())), val);
+                    assert_eq!(Value::from(from_value::<$t>(val_bytes.clone())), val);
+                    if n as u64 <= i64::max_value() as u64 {
+                        let val_int = Value::Int(n as i64);
+                        assert_eq!(Value::from(from_value::<$t>(val_int.clone())), val);
+                    }
+                }
+            }
+        };
+    }
 
     proptest! {
         #[test]
@@ -1258,11 +1281,70 @@ mod tests {
             let datetime = parse_mysql_datetime_string(time_string.as_bytes()).unwrap();
             assert_eq!(datetime, (y, m, d, h, i, s, if have_us == 1 { us } else { 0 }));
         }
+
+        #[test]
+        fn i128_roundtrip(
+            bytes_pos in r"16[0-9]{37}",
+            bytes_neg in r"-16[0-9]{37}",
+            uint in (i64::max_value() as u64 + 1)..u64::max_value(),
+            int: i64,
+        ) {
+            let val_bytes_pos = Value::Bytes(bytes_pos.as_bytes().into());
+            let val_bytes_neg = Value::Bytes(bytes_neg.as_bytes().into());
+            let val_uint = Value::UInt(uint);
+            let val_int = Value::Int(int);
+
+            assert_eq!(Value::from(from_value::<i128>(val_bytes_pos.clone())), val_bytes_pos);
+            assert_eq!(Value::from(from_value::<i128>(val_bytes_neg.clone())), val_bytes_neg);
+            assert_eq!(Value::from(from_value::<i128>(val_uint.clone())), val_uint);
+            assert_eq!(Value::from(from_value::<i128>(val_int.clone())), val_int);
+        }
+
+        #[test]
+        fn u128_roundtrip(
+            bytes in r"16[0-9]{37}",
+            uint: u64,
+            int in 0i64..i64::max_value(),
+        ) {
+            let val_bytes = Value::Bytes(bytes.as_bytes().into());
+            let val_uint = Value::UInt(uint);
+            let val_int = Value::Int(int);
+
+            assert_eq!(Value::from(from_value::<u128>(val_bytes.clone())), val_bytes);
+            assert_eq!(Value::from(from_value::<u128>(val_uint.clone())), val_uint);
+            assert_eq!(Value::from(from_value::<u128>(val_int.clone())), Value::UInt(int as u64));
+        }
+
+        #[test]
+        fn f32_roundtrip(n: f32) {
+            let val = Value::Float(n as f64);
+            let val_bytes = Value::Bytes(n.to_string().into());
+            assert_eq!(Value::from(from_value::<f32>(val.clone())), val);
+            assert_eq!(Value::from(from_value::<f32>(val_bytes.clone())), val);
+        }
+
+        #[test]
+        fn f64_roundtrip(n: f64) {
+            let val = Value::Float(n);
+            let val_bytes = Value::Bytes(n.to_string().into());
+            assert_eq!(Value::from(from_value::<f64>(val.clone())), val);
+            assert_eq!(Value::from(from_value::<f64>(val_bytes.clone())), val);
+        }
     }
+
+    signed_primitive_roundtrip!(i8, i8_roundtrip);
+    signed_primitive_roundtrip!(i16, i16_roundtrip);
+    signed_primitive_roundtrip!(i32, i32_roundtrip);
+    signed_primitive_roundtrip!(i64, i64_roundtrip);
+
+    unsigned_primitive_roundtrip!(u8, u8_roundtrip);
+    unsigned_primitive_roundtrip!(u16, u16_roundtrip);
+    unsigned_primitive_roundtrip!(u32, u32_roundtrip);
+    unsigned_primitive_roundtrip!(u64, u64_roundtrip);
 
     #[test]
     fn from_value_should_fail_on_integer_overflow() {
-        let value = Value::Bytes(b"18446744073709551616"[..].into());
+        let value = Value::Bytes(b"340282366920938463463374607431768211456"[..].into());
         assert!(from_value_opt::<u8>(value.clone()).is_err());
         assert!(from_value_opt::<i8>(value.clone()).is_err());
         assert!(from_value_opt::<u16>(value.clone()).is_err());
@@ -1271,11 +1353,13 @@ mod tests {
         assert!(from_value_opt::<i32>(value.clone()).is_err());
         assert!(from_value_opt::<u64>(value.clone()).is_err());
         assert!(from_value_opt::<i64>(value.clone()).is_err());
+        assert!(from_value_opt::<u128>(value.clone()).is_err());
+        assert!(from_value_opt::<i128>(value.clone()).is_err());
     }
 
     #[test]
     fn from_value_should_fail_on_integer_underflow() {
-        let value = Value::Bytes(b"-18446744073709551616"[..].into());
+        let value = Value::Bytes(b"-170141183460469231731687303715884105729"[..].into());
         assert!(from_value_opt::<u8>(value.clone()).is_err());
         assert!(from_value_opt::<i8>(value.clone()).is_err());
         assert!(from_value_opt::<u16>(value.clone()).is_err());
@@ -1284,18 +1368,8 @@ mod tests {
         assert!(from_value_opt::<i32>(value.clone()).is_err());
         assert!(from_value_opt::<u64>(value.clone()).is_err());
         assert!(from_value_opt::<i64>(value.clone()).is_err());
-    }
-
-    #[test]
-    fn negative_numbers() {
-        let value = Value::Bytes(b"-3"[..].into());
-
-        assert!(from_value_opt::<i8>(value.clone()).is_ok());
-        assert!(from_value_opt::<i16>(value.clone()).is_ok());
-        assert!(from_value_opt::<i32>(value.clone()).is_ok());
-        assert!(from_value_opt::<i64>(value.clone()).is_ok());
-        assert!(from_value_opt::<f32>(value.clone()).is_ok());
-        assert!(from_value_opt::<f64>(value.clone()).is_ok());
+        assert!(from_value_opt::<u128>(value.clone()).is_err());
+        assert!(from_value_opt::<i128>(value.clone()).is_err());
     }
 
     #[cfg(feature = "nightly")]
